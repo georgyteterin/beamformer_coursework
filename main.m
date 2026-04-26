@@ -1,6 +1,13 @@
 clear, clc, close all
 addpath Source\
 
+if(~exist("TestScenarios.mat", "file"))
+    GenerateTests();
+end
+
+load("TestScenarios.mat", "scenarios")
+
+% for each scenario in scenarios ....
 
 Scenario = GenerateScenario;
 
