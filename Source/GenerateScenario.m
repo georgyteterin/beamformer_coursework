@@ -1,14 +1,20 @@
-function Scenario = GenerateScenario
+function Scenario = GenerateScenario(config)
     NumTxAnts = 4;  % Number of transmit antennas
     NumSTS = 2;     % Number of space-time streams
     NumRxAnts = 2;  % Number of receive antennas
     
     cfgVHT = wlanVHTConfig;
-    cfgVHT.ChannelBandwidth = 'CBW20';
-    cfgVHT.APEPLength = 4000;
-    cfgVHT.NumTransmitAntennas = NumTxAnts;
-    cfgVHT.NumSpaceTimeStreams = NumSTS;
-    cfgVHT.MCS = 4; % 16-QAM, rate 3/4
+    if nargin < 1
+        cfgVHT.ChannelBandwidth = 'CBW20';
+        cfgVHT.APEPLength = 4000;
+        cfgVHT.NumTransmitAntennas = NumTxAnts;
+        cfgVHT.NumSpaceTimeStreams = NumSTS;
+        cfgVHT.MCS = 4; % 16-QAM, rate 3/4
+    else
+        cfgVHT = config.Config;
+    end
+
+    
     
     tgacChannel = wlanTGacChannel;
     tgacChannel.DelayProfile = 'Model-B';
