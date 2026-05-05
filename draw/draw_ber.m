@@ -12,7 +12,7 @@ load(resultsFile);
 for j_res = 1:length(SimulationResults)
     res = SimulationResults(j_res);
     
-    figure('Color', 'w', 'Name', res.Key);
+    figure('Name', res.Key);
     
     semilogy(res.snrVec, res.berSE, '-ro', 'LineWidth', 2, ...
         'MarkerSize', 8, 'MarkerFaceColor', 'r', 'DisplayName', 'Spatial Expansion');
