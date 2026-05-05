@@ -1,44 +1,44 @@
 function Scenario = GenerateScenario(config)
-    NumTxAnts = 4;  % Number of transmit antennas
-    NumSTS = 2;     % Number of space-time streams
-    NumRxAnts = 2;  % Number of receive antennas
+    cfgVHT = config.Config; 
     
-    cfgVHT = wlanVHTConfig;
-    if nargin < 1
-        cfgVHT.ChannelBandwidth = 'CBW20';
-        cfgVHT.APEPLength = 4000;
-        cfgVHT.NumTransmitAntennas = NumTxAnts;
-        cfgVHT.NumSpaceTimeStreams = NumSTS;
-        cfgVHT.MCS = 4; % 16-QAM, rate 3/4
-    else
-        cfgVHT = config.Config;
-    end
-
+    % Количество антенн теперь берется динамически
+    NumTxAnts = cfgVHT.NumTransmitAntennas; 
+    NumSTS = cfgVHT.NumSpaceTimeStreams;
+    NumRxAnts = config.NumRxAnts; 
     
-    
+    % 2. Настройка модели канала TGac
     tgacChannel = wlanTGacChannel;
-    tgacChannel.DelayProfile = 'Model-B';
+    tgacChannel.DelayProfile = config.DelayProfile;         % Модель (A, B, C, D)
+    tgacChannel.TransmitReceiveDistance = config.Distance;  % Дистанция (м)
     tgacChannel.ChannelBandwidth = cfgVHT.ChannelBandwidth;
     tgacChannel.SampleRate = wlanSampleRate(cfgVHT);
+    
+    % Устанавливаем соответствие антенн (критично для устранения твоей ошибки)
     tgacChannel.NumReceiveAntennas = NumRxAnts;
     tgacChannel.NumTransmitAntennas = NumTxAnts;
-    tgacChannel.TransmitReceiveDistance = 100; % Meters
+    
+    % Параметры дистанции и повторяемости
+    tgacChannel.TransmitReceiveDistance = 10; % Метры (можно вынести в JSON)
     tgacChannel.RandomStream = 'mt19937ar with seed';
-    tgacChannel.Seed = 70; % Seed to allow repeatability
-    
-    noisePower = -37; % dBW
-    
+    tgacChannel.Seed = 70; 
+
+
     awgnChannel = comm.AWGNChannel;
     awgnChannel.RandomStream = 'mt19937ar with seed';
     awgnChannel.Seed = 5;
     awgnChannel.NoiseMethod = 'Variance';
-    awgnChannel.Variance = 10^(noisePower/10);
-    
+
     Scenario.NumTxAnts = NumTxAnts; 
     Scenario.NumSTS = NumSTS;
     Scenario.NumRxAnts = NumRxAnts;
     Scenario.cfgVHT = cfgVHT;
     Scenario.tgacChannel = tgacChannel;
-    Scenario.noisePower = noisePower;
     Scenario.awgnChannel = awgnChannel;
+    
+
+    if isfield(config, 'CurrentSNR')
+        Scenario.targetSNR = config.CurrentSNR;
+    else
+        Scenario.targetSNR = 20;
+    end
 end

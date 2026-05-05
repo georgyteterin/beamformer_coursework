@@ -1,51 +1,57 @@
-function GenerateTests(filename)
-    if nargin < 1
-        filename = 'TestScenarios.mat';
+function scenarios = GenerateTests(jsonFileName)
+    if nargin < 1, jsonFileName = 'config.json'; end
+    
+    if ~exist(jsonFileName, 'file')
+        error('Файл конфигурации %s не найден!', jsonFileName);
     end
+    
+    % Читаем JSON
+    conf = jsondecode(fileread(jsonFileName));
+    sys = conf.SystemParams;
+    snrVec = conf.StudyParams.SnrRange;
+    
 
-    TxVals = [2, 4, 8];
-    McsVals = [0, 4];
-    BwVals = {'CBW20', 'CBW40'};
-
-    scenarioCount = 0;
-    scenarios = [];   % Дикшенари Key, Value
-
-    for idx_Tx = 1 : length(TxVals)
-        NumTx = TxVals(idx_Tx);
-        StsVals = 1 : min(4, NumTx);
-
-        for idx_STS = 1 : length(StsVals)
-            NumSTS = StsVals(idx_STS);
-
-            for idx_MCS = 1 : length(McsVals)
-                MCS = McsVals(idx_MCS);
-
-                for idx_BW = 1:length(BwVals)
-                    BW = BwVals{idx_BW};
-
-                    cfgVHT = wlanVHTConfig;
-                    cfgVHT.ChannelBandwidth = BW;
-                    cfgVHT.NumTransmitAntennas = NumTx;
-                    cfgVHT.NumSpaceTimeStreams = NumSTS;
-                    cfgVHT.MCS = MCS;
-                    cfgVHT.APEPLength = 4000; 
-                    Key = sprintf('Tx%d_STS%d_MCS%d_%s', NumTx, NumSTS, MCS, BW); 
-                    KeyValuePair.Key = Key;
-                    KeyValuePair.Value.Config = cfgVHT; 
+    if isfield(conf.StudyParams, 'NumPackets')
+        numPackets = conf.StudyParams.NumPackets;
+    else
+        numPackets = 1;
+    end
+    
+    scenarios = [];
+    
+    % Формируем список конфигураций
+    for numTx = sys.TxVals'
+        % Кол-во потоков ограничено и передатчиком, и приемников
+        
+        for cur_numSTS = sys.numSTS.'
+            for mcs = sys.McsVals'
+                for bwCell = sys.BwVals'
+                    bw = bwCell{1};
                     
-                    if isempty(scenarios)
-                        scenarios = KeyValuePair;
-                    else
-                        scenarios(end + 1) = KeyValuePair;
-                    end 
+                    cfgVHT = wlanVHTConfig;
+                    cfgVHT.ChannelBandwidth = bw;
+                    cfgVHT.NumTransmitAntennas = numTx;
+                    cfgVHT.NumSpaceTimeStreams = cur_numSTS;
+                    cfgVHT.MCS = mcs;
+                    cfgVHT.APEPLength = sys.APEPLength;
 
-                    scenarioCount = scenarioCount + 1;
-                    fprintf('Generated scenario %d: %s\n', scenarioCount, Key);
+                    % Создаем структуру для одной конфигурации
+                    S.Key = sprintf('Tx%d_STS%d_MCS%d_%s', numTx, cur_numSTS, mcs, sys.DelayProfile);
+                    
+                    S.Value.Config = cfgVHT;
+                    S.Value.SnrVec = snrVec(:)'; 
+                    S.Value.NumRxAnts = sys.NumRxAnts;
+                    S.Value.NumPackets = numPackets; 
+                    
+                    % ПАРАМЕТРЫ ФИЗИКИ
+                    S.Value.DelayProfile = sys.DelayProfile;
+                    S.Value.Distance = sys.Distance;
+                    
+                    scenarios = [scenarios; S]; 
                 end
             end
         end
     end
-
-    save(filename, 'scenarios');
-    fprintf('\nTotal of %d scenarios saved in %s\n', length(scenarios), filename);
+    fprintf('Сгенерировано %d конфигураций из %s (Пакетов на точку: %d)\n', ...
+        length(scenarios), jsonFileName, numPackets);
 end

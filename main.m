@@ -1,28 +1,73 @@
 clear, clc, close all
 addpath Source\
 
-if(~exist("TestScenarios.mat", "file"))
-    GenerateTests();
+configDir = "configs/";
+configName = "test1"; 
+configPath = configDir + configName + ".json";
+
+scenarios = GenerateTests(configPath); 
+
+% Инициализируем структуру для хранения результатов
+SimulationResults = struct();
+
+for j_scenario = 1:length(scenarios)
+    currScenario = scenarios(j_scenario);
+    snrVec = currScenario.Value.SnrVec;
+    numPackets = currScenario.Value.NumPackets;
+    
+    berSE = zeros(size(snrVec));
+    berBF = zeros(size(snrVec));
+    
+    fprintf('\n=== Исследование: %s ===\n', currScenario.Key);
+    
+    for j_snr = 1:length(snrVec)
+        if j_snr > 1 && berSE(j_snr-1) == 0 && berBF(j_snr-1) == 0
+            fprintf('Достигнут нулевой BER для обоих методов.\n');
+            % Заполняем оставшиеся точки SNR нулями и выходим
+            berSE(j_snr:end) = 0;
+            berBF(j_snr:end) = 0;
+            break;
+        end
+
+        totalErrorsSE = 0;
+        totalErrorsBF = 0;
+        totalBits = 0;
+        
+        for p = 1:numPackets
+            params = currScenario.Value;
+            params.CurrentSNR = snrVec(j_snr);
+            
+            Scenario = GenerateScenario(params);
+            Res = ScenarioRunner(Scenario);
+            
+            % Накапливаем ошибки
+            totalErrorsSE = totalErrorsSE + Res.SpatialExpansion.ErrCount;
+            totalErrorsBF = totalErrorsBF + Res.Beamformer.ErrCount;
+            
+            % Считаем общее кол-во переданных бит
+            totalBits = totalBits + (Scenario.cfgVHT.PSDULength * 8);
+        end
+        
+        % Итоговый BER для данной точки SNR
+        berSE(j_snr) = totalErrorsSE / totalBits;
+        berBF(j_snr) = totalErrorsBF / totalBits;
+        
+        fprintf('SNR: %6.2f dB | BER BF: %.4e | BER SE: %.4e\n', ...
+            snrVec(j_snr), berBF(j_snr), berSE(j_snr));
+    end
+    
+    % Сохраняем данные сценария в структуру
+    SimulationResults(j_scenario).Key = currScenario.Key;
+    SimulationResults(j_scenario).snrVec = snrVec;
+    SimulationResults(j_scenario).berSE = berSE;
+    SimulationResults(j_scenario).berBF = berBF;
+    SimulationResults(j_scenario).params = currScenario.Value;
 end
 
-load("TestScenarios.mat", "scenarios")
+% Сохранение результатов в файл
+if ~exist('results', 'dir'), mkdir('results'); end
+saveDir = "results\";
+savePath = saveDir + "results_" + configName + ".mat";
+save(savePath, "SimulationResults");
 
-for loadedScenario = scenarios
-    Scenario = GenerateScenario(loadedScenario.Value);
-    Res = ScenarioRunner(Scenario);
-    
-    symSE = Res.SpatialExpansion.Sym;
-    symBF = Res.Beamformer.Sym;
-    refSym = Res.RefSym;
-    chanEstSE = Res.SpatialExpansion.Chest;
-    chanEstBF = Res.Beamformer.Chest;
-    
-    str = sprintf('%dx%d',Scenario.NumTxAnts,Scenario.NumRxAnts);
-    vhtBeamformingPlotConstellation([symSE(:) symBF(:)], refSym, ...
-        'Comparison', {[str ' Spatial Expansion'], [str ' Transmit Beamforming']});
-    
-    fprintf('Power SE: %.2f W, %.2f W\n', sum(mean(abs(chanEstSE).^2,1),3));
-    fprintf('Power BF: %.2f W, %.2f W\n', sum(mean(abs(chanEstBF).^2,1),3));
-end
-
-
+fprintf('\nРезультаты сохранены в файл: %s\n', savePath);
