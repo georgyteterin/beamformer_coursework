@@ -19,13 +19,9 @@ function Scenario = GenerateScenario(config)
     
     % Параметры дистанции и повторяемости
     tgacChannel.TransmitReceiveDistance = 10; % Метры (можно вынести в JSON)
-    tgacChannel.RandomStream = 'mt19937ar with seed';
-    tgacChannel.Seed = 70; 
 
 
     awgnChannel = comm.AWGNChannel;
-    awgnChannel.RandomStream = 'mt19937ar with seed';
-    awgnChannel.Seed = 5;
     awgnChannel.NoiseMethod = 'Variance';
 
     Scenario.NumTxAnts = NumTxAnts; 

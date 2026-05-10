@@ -58,7 +58,8 @@ function scenarios = GenerateTests(jsonFileName)
                     cfgVHT.APEPLength = sys.APEPLength;
 
                     % Формируем уникальный ключ для идентификации теста
-                    S.Key = sprintf('Tx%d_STS%d_MCS%d_%s', numTx, cur_numSTS, mcs, sys.DelayProfile);
+                    techName = strjoin(string(conf.StudyParams.tech), '_');
+                    S.Key = sprintf('%s_Tx%d_STS%d_MCS%d_%s',techName, numTx, cur_numSTS, mcs, sys.DelayProfile);
                     
                     S.Value.Config = cfgVHT;
                     S.Value.SnrVec = snrVec(:)'; 
@@ -68,6 +69,9 @@ function scenarios = GenerateTests(jsonFileName)
                     % Параметры окружения
                     S.Value.DelayProfile = sys.DelayProfile;
                     S.Value.Distance = sys.Distance;
+
+                    % Тех. параметр
+                    S.Value.NumWorkers = conf.StudyParams.NumWorkers;
                     
                     scenarios = [scenarios; S]; %#ok<AGROW>
                 end

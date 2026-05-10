@@ -11,10 +11,12 @@
   },
   "StudyParams": {
     "SnrRange": [0, 25],
-    "NumPackets": 5,
-    "MinBerThreshold": 1e-6,
-    "maxRefinements": 5,
-    "berDiffThreshold": 0.25,
-    "minSnrStep": 0.25
+    "NumPackets": 200,
+    "MinPerThreshold": 0.001,
+    "maxRefinements": 7,
+    "perDiffThreshold": 0.15,
+    "minSnrStep": 0.25,
+    "tech": ["SE", "BF"],
+    "NumWorkers": 12
 }
 }

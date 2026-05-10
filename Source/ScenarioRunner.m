@@ -2,9 +2,11 @@ function Res = ScenarioRunner(Scenario, Tech)
     % папки с хелперами
     addpath ExampleSource\
     
-    cfgVHT = Scenario.cfgVHT;
+    cfgVHT = Scenario.Config;
     tgacChannel = Scenario.tgacChannel;
     awgnChannel = Scenario.awgnChannel;
+    reset(tgacChannel);
+    reset(awgnChannel);
     targetSNR = Scenario.targetSNR;
 
     % Генерируем данные (одинаковые для обоих методов в рамках одного прогона)
@@ -31,7 +33,6 @@ function Res = ScenarioRunner(Scenario, Tech)
     Res.Syms = Syms;
     Res.Bits = Bits;
     Res.ErrCount = biterr(psdu, Bits);
-    Res.BER = Res.ErrCount / length(psdu);
 end
 
 % --- ФУНКЦИИ МЕТОДОВ ПЕРЕДАЧИ ---
