@@ -10,13 +10,11 @@
     "Distance": 10
   },
   "StudyParams": {
-    "SnrRange": [
-        [0, 5, 10],      
-        [10, 0.5, 15],   
-        [15, 2, 25]      
-    ],
+    "SnrRange": [0, 25],
     "NumPackets": 5,
-    "Patience": 3,
-    "MinBerThreshold": 1e-6
+    "MinBerThreshold": 1e-6,
+    "maxRefinements": 5,
+    "berDiffThreshold": 0.25,
+    "minSnrStep": 0.25
 }
 }

@@ -1,41 +1,23 @@
 clear, clc, close all
 addpath Source\
 
-% Настройки путей
-configDir = "configs/";
-configName = "test1"; 
-configPath = configDir + configName + ".json";
-
+% 1. Настройки путей
+configName = "test1";
+configPath = "configs/"+configName+".json";
 if ~exist('results', 'dir'), mkdir('results'); end
 
 scenarios = GenerateTests(configPath); 
-
 conf = jsondecode(fileread(configPath));
-patienceLimit = 3; % По умолчанию
-if isfield(conf, 'StudyParams')
-    if isfield(conf.StudyParams, 'Patience')
-        patienceLimit = conf.StudyParams.Patience;
-    else
-        patienceLimit = 3;
-    end
-    if isfield(conf.StudyParams, 'MinBerThreshold')
-        minBerThreshold = conf.StudyParams.MinBerThreshold;
-    else
-        minBerThreshold = 1e-6; 
-    end
-end
- 
+
+berDiffThreshold = 0.25;   % Порог изменения log10(BER) для добавления точки
+
 SimulationResults = struct();
 
 for j_scenario = 1:length(scenarios)
-    currScenario = scenarios(j_scenario);
-    snrVec = currScenario.Value.SnrVec;
-    numPackets = currScenario.Value.NumPackets;    
-    patienceCounter = 0; 
-    
-    fprintf('\n=== Тест: %s ===\n', currScenario.Key);
+    curr = scenarios(j_scenario);
+    fprintf('=== Сценарий: %s ===\n', curr.Key);
+    params = curr.Value;
     for tech = ["SE", "BF"]
-
         switch tech 
             case "SE"
                 fieldName = "SpatialExpansion";
@@ -43,36 +25,85 @@ for j_scenario = 1:length(scenarios)
                 fieldName = "Beamformer";
         end
 
-        fprintf("Технология: %s...\n", fieldName);
+    fprintf("Технология: %s...\n", fieldName);
+    
+    % Начальная сетка
+    coarseSnr = linspace(min(params.SnrVec), max(params.SnrVec), 5); % 5 опорных точек для начала
+    ber.(fieldName) = zeros(size(coarseSnr));
 
-        for j_snr = 1:length(snrVec)
-            [totalErrors.(tech), totalBits] = deal(0);
-            currentSNR = snrVec(j_snr);
-            
-            for p = 1:numPackets
-                params = currScenario.Value;
-                params.CurrentSNR = currentSNR;
-                
-                Scenario = GenerateScenario(params);
-                Res.(fieldName) = ScenarioRunner(Scenario, tech);
-                
-                totalErrors.(tech) = totalErrors.(tech) + Res.(fieldName).ErrCount;
-                totalBits = totalBits + (Scenario.cfgVHT.PSDULength * 8);
-            end
+    runPoint = @(snr, tech) calculateBER(snr, tech, params);
 
-            ber.(tech)(j_snr) = totalErrors.(tech)/ totalBits;
-
-            fprintf("SNR: %5 .2f | BER: %.5f\n", currentSNR, ber.(tech)(j_snr));
-
+    % считаем начальные точки
+    for j_snr = 1:length(coarseSnr)
+        ber.(fieldName)(j_snr) = runPoint(coarseSnr(j_snr), tech);
+        fprintf('SNR: %5.2f | BER: %.5f\n', coarseSnr(j_snr), ber.(fieldName)(j_snr));
+        if ber.(fieldName)(j_snr) <= conf.StudyParams.MinBerThreshold
+            coarseSnr(j_snr + 1: end) = [];
+            break;
         end
     end
+
+    refinementDone = true;
+    level = 0;
+    while refinementDone && level < conf.StudyParams.maxRefinements
+        refinementDone = false;
+        newBer = [];
+        newSnr = [];
+        
+        for j_snr = 1:length(coarseSnr)-1
+            snr_left = coarseSnr(j_snr); snr_right = coarseSnr(j_snr+1);
+            ber_left = ber.(fieldName)(j_snr);   ber_right = ber.(fieldName)(j_snr+1);
+            
+            diff = abs(log10(ber_left+1e-9) - log10(ber_right+1e-9));
+            
+            if (diff > conf.StudyParams.berDiffThreshold) && (snr_right - snr_left > conf.StudyParams.minSnrStep)
+                midSNR = (snr_left + snr_right) / 2;
+                midBer = runPoint(midSNR, tech);
+                
+                fprintf('[Уточнение] Добавляем точку SNR: %5.2f\n', midSNR);
+                
+                newSnr = [newSnr, snr_left, midSNR]; %#ok<AGROW>
+                newBer  = [newBer,  ber_left, midBer]; %#ok<AGROW>
+                refinementDone = true;
+            else
+                newSnr = [newSnr, snr_left]; %#ok<AGROW>
+                newBer  = [newBer,  ber_left]; %#ok<AGROW>
+            end
+        end 
+        coarseSnr = [newSnr, coarseSnr(end)];
+        ber.(fieldName) = [newBer, ber.(fieldName)(end)];
+        level = level + 1;
+    end 
+    
+    % Сортируем (на всякий случай)
+    [coarseSnr, idx] = sort(coarseSnr);
+    ber.(fieldName) = ber.(fieldName)(idx);
+
     % Сохранение
-    SimulationResults(j_scenario).Key = currScenario.Key;
-    SimulationResults(j_scenario).snrVec = snrVec;
-    SimulationResults(j_scenario).berSE = berSE;
-    SimulationResults(j_scenario).berBF = berBF;
-    SimulationResults(j_scenario).params = currScenario.Value;
+    SimulationResults(j_scenario).Key = curr.Key;
+    SimulationResults(j_scenario).snr.(fieldName) = coarseSnr;
+    SimulationResults(j_scenario).ber.(fieldName) = ber.(fieldName);
+    end
 end
 
-save("results/results_" + configName + ".mat", "SimulationResults");
-fprintf('\nРезультаты сохранены в results/results_%s.mat\n', configName);
+save("results/results_"+configName+".mat", "SimulationResults");
+
+% --- Вспомогательная функция (добавьте её в конец файла main.m) ---
+function ber = calculateBER(currentSNR, tech, params)
+    totalErrors = 0;
+    totalBits = 0;
+    
+    % Вшиваем логику пакетов прямо сюда
+    for p = 1:params.NumPackets
+        p_in = params;
+        p_in.CurrentSNR = currentSNR;
+        
+        % Используем ваши оригинальные функции
+        Scenario = GenerateScenario(p_in);
+        Res = ScenarioRunner(Scenario, tech);
+        
+        totalErrors = totalErrors + Res.ErrCount;
+        totalBits = totalBits + (Scenario.cfgVHT.PSDULength * 8);
+    end
+    ber = totalErrors / totalBits;
+end
