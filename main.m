@@ -1,62 +1,72 @@
 clear, clc, close all
 addpath Source\
 
+% Настройки путей
 configDir = "configs/";
 configName = "test1"; 
 configPath = configDir + configName + ".json";
 
+if ~exist('results', 'dir'), mkdir('results'); end
+
 scenarios = GenerateTests(configPath); 
 
-% Инициализируем структуру для хранения результатов
+conf = jsondecode(fileread(configPath));
+patienceLimit = 3; % По умолчанию
+if isfield(conf, 'StudyParams')
+    if isfield(conf.StudyParams, 'Patience')
+        patienceLimit = conf.StudyParams.Patience;
+    else
+        patienceLimit = 3;
+    end
+    if isfield(conf.StudyParams, 'MinBerThreshold')
+        minBerThreshold = conf.StudyParams.MinBerThreshold;
+    else
+        minBerThreshold = 1e-6; 
+    end
+end
+ 
 SimulationResults = struct();
 
 for j_scenario = 1:length(scenarios)
     currScenario = scenarios(j_scenario);
     snrVec = currScenario.Value.SnrVec;
-    numPackets = currScenario.Value.NumPackets;
+    numPackets = currScenario.Value.NumPackets;    
+    patienceCounter = 0; 
     
-    berSE = zeros(size(snrVec));
-    berBF = zeros(size(snrVec));
-    
-    fprintf('\n=== Исследование: %s ===\n', currScenario.Key);
-    
-    for j_snr = 1:length(snrVec)
-        if j_snr > 1 && berSE(j_snr-1) == 0 && berBF(j_snr-1) == 0
-            fprintf('Достигнут нулевой BER для обоих методов.\n');
-            % Заполняем оставшиеся точки SNR нулями и выходим
-            berSE(j_snr:end) = 0;
-            berBF(j_snr:end) = 0;
-            break;
+    fprintf('\n=== Тест: %s ===\n', currScenario.Key);
+    for tech = ["SE", "BF"]
+
+        switch tech 
+            case "SE"
+                fieldName = "SpatialExpansion";
+            case "BF"
+                fieldName = "Beamformer";
         end
 
-        totalErrorsSE = 0;
-        totalErrorsBF = 0;
-        totalBits = 0;
-        
-        for p = 1:numPackets
-            params = currScenario.Value;
-            params.CurrentSNR = snrVec(j_snr);
+        fprintf("Технология: %s...\n", fieldName);
+
+        for j_snr = 1:length(snrVec)
+            [totalErrors.(tech), totalBits] = deal(0);
+            currentSNR = snrVec(j_snr);
             
-            Scenario = GenerateScenario(params);
-            Res = ScenarioRunner(Scenario);
-            
-            % Накапливаем ошибки
-            totalErrorsSE = totalErrorsSE + Res.SpatialExpansion.ErrCount;
-            totalErrorsBF = totalErrorsBF + Res.Beamformer.ErrCount;
-            
-            % Считаем общее кол-во переданных бит
-            totalBits = totalBits + (Scenario.cfgVHT.PSDULength * 8);
+            for p = 1:numPackets
+                params = currScenario.Value;
+                params.CurrentSNR = currentSNR;
+                
+                Scenario = GenerateScenario(params);
+                Res.(fieldName) = ScenarioRunner(Scenario, tech);
+                
+                totalErrors.(tech) = totalErrors.(tech) + Res.(fieldName).ErrCount;
+                totalBits = totalBits + (Scenario.cfgVHT.PSDULength * 8);
+            end
+
+            ber.(tech)(j_snr) = totalErrors.(tech)/ totalBits;
+
+            fprintf("SNR: %5 .2f | BER: %.5f\n", currentSNR, ber.(tech)(j_snr));
+
         end
-        
-        % Итоговый BER для данной точки SNR
-        berSE(j_snr) = totalErrorsSE / totalBits;
-        berBF(j_snr) = totalErrorsBF / totalBits;
-        
-        fprintf('SNR: %6.2f dB | BER BF: %.4e | BER SE: %.4e\n', ...
-            snrVec(j_snr), berBF(j_snr), berSE(j_snr));
     end
-    
-    % Сохраняем данные сценария в структуру
+    % Сохранение
     SimulationResults(j_scenario).Key = currScenario.Key;
     SimulationResults(j_scenario).snrVec = snrVec;
     SimulationResults(j_scenario).berSE = berSE;
@@ -64,10 +74,5 @@ for j_scenario = 1:length(scenarios)
     SimulationResults(j_scenario).params = currScenario.Value;
 end
 
-% Сохранение результатов в файл
-if ~exist('results', 'dir'), mkdir('results'); end
-saveDir = "results\";
-savePath = saveDir + "results_" + configName + ".mat";
-save(savePath, "SimulationResults");
-
-fprintf('\nРезультаты сохранены в файл: %s\n', savePath);
+save("results/results_" + configName + ".mat", "SimulationResults");
+fprintf('\nРезультаты сохранены в results/results_%s.mat\n', configName);

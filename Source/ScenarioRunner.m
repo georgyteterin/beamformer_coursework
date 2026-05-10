@@ -1,5 +1,5 @@
-function Res = ScenarioRunner(Scenario)
-    % Подключаем папки с хелперами
+function Res = ScenarioRunner(Scenario, Tech)
+    % папки с хелперами
     addpath ExampleSource\
     
     cfgVHT = Scenario.cfgVHT;
@@ -8,12 +8,9 @@ function Res = ScenarioRunner(Scenario)
     targetSNR = Scenario.targetSNR;
 
     % Генерируем данные (одинаковые для обоих методов в рамках одного прогона)
-    rng(0); 
     psdu = randi([0 1], cfgVHT.PSDULength*8, 1);
 
-    % --- ШАГ 1: ФИКСИРУЕМ МОЩНОСТЬ ШУМА (Эфирный фон) ---
-    % Мы измеряем мощность на обычном Spatial Expansion. 
-    % Это будет наш "эталон" для расчета NoiseVar.
+    % "эталон" для расчета NoiseVar.
     vhtSample = cfgVHT;
     vhtSample.SpatialMapping = 'Custom';
     vhtSample.SpatialMappingMatrix = helperSpatialExpansionMatrix(vhtSample);
@@ -24,25 +21,17 @@ function Res = ScenarioRunner(Scenario)
     basePower = mean(abs(rxSample(:)).^2); 
     % ---------------------------------------------------
 
-    % 1. Запуск Spatial Expansion
-    [symSE, ~, bitsSE] = runSpatialExpansion(cfgVHT, psdu, tgacChannel, awgnChannel, targetSNR, basePower);
+    switch Tech
+        case 'SE'
+            [Syms, ~, Bits] = runSpatialExpansion(cfgVHT, psdu, tgacChannel, awgnChannel, targetSNR, basePower);
+        case 'BF'
+            [Syms, ~, Bits] = runBeamforming(cfgVHT, psdu, tgacChannel, awgnChannel, targetSNR, basePower);
+    end
 
-    % 2. Запуск Beamforming (SVD)
-    [symBF, ~, bitsBF] = runBeamforming(cfgVHT, psdu, tgacChannel, awgnChannel, targetSNR, basePower);
-
-    % Считаем количество битовых ошибок для main.m
-    Res.SpatialExpansion.ErrCount = biterr(psdu, bitsSE);
-    Res.Beamformer.ErrCount = biterr(psdu, bitsBF);
-
-    % Сохраняем результаты для графиков и созвездий
-    refSym = wlanReferenceSymbols(cfgVHT);
-    Res.Beamformer.Sym = symBF;
-    Res.Beamformer.BER = Res.Beamformer.ErrCount / length(psdu);
-    
-    Res.SpatialExpansion.Sym = symSE;
-    Res.SpatialExpansion.BER = Res.SpatialExpansion.ErrCount / length(psdu);
-    
-    Res.RefSym = refSym;
+    Res.Syms = Syms;
+    Res.Bits = Bits;
+    Res.ErrCount = biterr(psdu, Bits);
+    Res.BER = Res.ErrCount / length(psdu);
 end
 
 % --- ФУНКЦИИ МЕТОДОВ ПЕРЕДАЧИ ---
