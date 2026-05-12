@@ -1,6 +1,6 @@
 clear, clc, close all
 
-testname = "test1";
+testname = "mcs_sweep";
 resultsFile = "..\results\results_" + testname + ".mat"; 
 
 if ~exist(resultsFile, 'file')
@@ -80,7 +80,7 @@ for j_res = 1:length(SimulationResults)
 
     hl = yline(y_thresold, '--', 'LineWidth', 2.5);
     hl.Color = [0.8 0.2 0.2]; 
-    hl.Label = 'Wi-Fi Working Point (PER=0.1)';
+    % hl.Label = 'Wi-Fi Working Point (PER=0.1)';
     hl.Interpreter = 'latex'; 
     hl.FontWeight = 'bold';
     hl.FontSize = 10;

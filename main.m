@@ -3,7 +3,7 @@ addpath Source\
 
 rng('shuffle');
 
-configName = "test1";
+configName = "mcs_sweep";
 configPath = "configs/"+configName+".json";
 if ~exist('results', 'dir'), mkdir('results'); end
 
@@ -18,13 +18,11 @@ elseif currPool.NumWorkers ~= conf.StudyParams.NumWorkers
     parpool('Processes', conf.StudyParams.NumWorkers);
 end
 
-perDiffThreshold = 0.25;
-
 SimulationResults = struct();
 
 for j_scenario = 1:length(scenarios)
     curr = scenarios(j_scenario);
-    fprintf('=== Сценарий: %s ===\n', curr.Key);
+    fprintf('[%s] === Сценарий [%i/%i]: %s ===\n', datetime, curr.Key, j_scenario, length(scenarios));
     params = curr.Value;
     for tech = string(conf.StudyParams.tech).'
         switch tech 
@@ -34,7 +32,7 @@ for j_scenario = 1:length(scenarios)
                 fieldName = "Beamformer";
         end
 
-    fprintf("Технология: %s...\n", fieldName);
+    fprintf("[%s] Технология: %s...\n", datetime, fieldName);
     
     % Начальная сетка
     coarseSnr = linspace(min(params.SnrVec), max(params.SnrVec), 5); % 5 опорных точек для начала
@@ -45,7 +43,7 @@ for j_scenario = 1:length(scenarios)
     % считаем начальные точки
     for j_snr = 1:length(coarseSnr)
         per.(fieldName)(j_snr) = runPoint(coarseSnr(j_snr), tech);
-        fprintf('SNR: %5.2f | per: %.5f\n', coarseSnr(j_snr), per.(fieldName)(j_snr));
+        fprintf('[%s] SNR: %5.2f | per: %.5f\n', datetime, coarseSnr(j_snr), per.(fieldName)(j_snr));
         if per.(fieldName)(j_snr) <= conf.StudyParams.MinPerThreshold
             coarseSnr(j_snr + 1: end) = [];
             break;
@@ -64,7 +62,7 @@ for j_scenario = 1:length(scenarios)
             per_left = per.(fieldName)(j_snr);   per_right = per.(fieldName)(j_snr+1);
             
             isRefinementNeeded = ...
-                (abs(per_left - per_right) > perDiffThreshold);
+                (abs(per_left - per_right) > conf.StudyParams.perDiffThreshold);
             isDiffHighEnough = ...
                 (per_left > conf.StudyParams.MinPerThreshold);
             isStepHighEnough = ...
@@ -74,7 +72,7 @@ for j_scenario = 1:length(scenarios)
                 midSNR = (snr_left + snr_right) / 2;
                 midper = runPoint(midSNR, tech);
                 
-                fprintf('[Уточнение] Добавляем точку SNR: %5.2f\n', midSNR);
+                fprintf('[%s][Уточнение] Добавляем точку SNR: %5.2f\n', datetime, midSNR);
                 
                 newSnr = [newSnr, snr_left, midSNR]; %#ok<AGROW>
                 newper  = [newper,  per_left, midper]; %#ok<AGROW>
@@ -100,8 +98,23 @@ for j_scenario = 1:length(scenarios)
     SimulationResults(j_scenario).config = conf;
     end
 end
+% сохранение результатов с дополнениеями
+savePath = "results/results_" + configName + ".mat";
 
-save("results/results_"+configName+".mat", "SimulationResults");
+if exist(savePath, 'file')
+    
+    existingData = load(savePath, 'SimulationResults');
+    oldResults = existingData.SimulationResults;
+    
+    SimulationResults = [oldResults, SimulationResults];
+    
+    % Опционально: можно добавить проверку на уникальность по ключу (curr.Key),
+    % чтобы не плодить дубликаты одного и того же сценария
+    % [~, uniqueIdx] = unique({SimulationResults.Key}, 'stable');
+    % SimulationResults = SimulationResults(uniqueIdx);
+end
+
+save(savePath, "SimulationResults");
 
 
 function per = calculatePer(currentSNR, tech, params)

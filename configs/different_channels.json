@@ -1,17 +1,17 @@
 {
   "SystemParams": {
     "TxVals": [2],
-    "McsVals": [3],
+    "McsVals": [4],
     "BwVals": ["CBW20"],
     "NumRxAnts": 2,
-    "numSTS": [1, 2],
+    "numSTS": [1],
     "APEPLength": 2000,
-    "DelayProfile": "Model-B",
+    "DelayProfile": "Model-D",
     "Distance": 10
   },
   "StudyParams": {
-    "SnrRange": [0, 25],
-    "NumPackets": 200,
+    "SnrRange": [5, 35],
+    "NumPackets": 2000,
     "MinPerThreshold": 0.001,
     "maxRefinements": 7,
     "perDiffThreshold": 0.15,
